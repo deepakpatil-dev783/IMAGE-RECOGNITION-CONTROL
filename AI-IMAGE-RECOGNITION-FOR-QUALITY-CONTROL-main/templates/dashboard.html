@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QC Dashboard</title>
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--accent:#58a6ff;--pass:#3fb950;--fail:#f85149;--border:#30363d;--text:#c9d1d9;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;}
+  header{background:var(--card);border-bottom:1px solid var(--border);padding:1rem 2rem;display:flex;align-items:center;gap:1rem;}
+  header h1{font-size:1.3rem;color:#fff;}
+  header span{font-size:.85rem;color:#8b949e;}
+  .main{max-width:1100px;margin:2rem auto;padding:0 1.5rem;display:grid;gap:1.5rem;grid-template-columns:1fr 1fr;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;}
+  .card h2{font-size:1rem;margin-bottom:1rem;color:#fff;}
+  .drop-zone{border:2px dashed var(--border);border-radius:8px;padding:3rem 1rem;text-align:center;cursor:pointer;transition:.2s;}
+  .drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:rgba(88,166,255,.05);}
+  .drop-zone p{font-size:.9rem;color:#8b949e;}
+  .drop-zone img{max-width:100%;height:auto;border-radius:6px;}
+  .btn{background:var(--accent);color:#0d1117;border:none;padding:.6rem 1.4rem;border-radius:6px;font-weight:600;cursor:pointer;font-size:.9rem;text-decoration:none;display:inline-block;text-align:center;}
+  .btn:hover{opacity:.85;}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-green{background:#238636;color:#fff;}
+  .btn-red{background:#da3633;color:#fff;}
+  .btn-gray{background:#21262d;color:var(--text);}
+  .btn-pdf{background:#e05c0a;color:#fff;}
+  .result{display:none;margin-top:1.2rem;}
+  .verdict{font-size:2rem;font-weight:700;text-align:center;padding:1rem;border-radius:8px;}
+  .verdict.pass{background:rgba(63,185,80,.1);color:var(--pass);}
+  .verdict.defect{background:rgba(248,81,73,.1);color:var(--fail);}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:1rem;}
+  .meta-item{background:rgba(255,255,255,.03);border-radius:6px;padding:.6rem .8rem;}
+  .meta-item label{font-size:.75rem;color:#8b949e;display:block;}
+  .meta-item span{font-size:.9rem;font-weight:600;}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;}
+  .stat{text-align:center;padding:1rem;background:rgba(255,255,255,.03);border-radius:8px;}
+  .stat .num{font-size:2rem;font-weight:700;}
+  .stat .lbl{font-size:.8rem;color:#8b949e;margin-top:.2rem;}
+  #fileInput{display:none;}
+  .loader{display:none;text-align:center;padding:2rem;color:#8b949e;}
+  .action-row{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:1rem;}
+  .action-row .btn{flex:1;}
+  .history-list{margin-top:1.5rem;max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem;}
+  .report-box{margin-top:1.2rem;padding:1rem;background:rgba(224,92,10,.08);border:1px solid rgba(224,92,10,.3);border-radius:8px;display:none;}
+  .report-box p{font-size:.85rem;color:#8b949e;margin-bottom:.6rem;}
+  .pdf-badge{display:inline-block;background:rgba(224,92,10,.15);color:#e05c0a;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600;margin-left:.4rem;}
+  .toast{position:fixed;bottom:2rem;right:2rem;background:#238636;color:#fff;padding:.8rem 1.4rem;border-radius:8px;font-size:.9rem;font-weight:600;display:none;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4);}
+  @media(max-width:900px){.main{grid-template-columns:1fr;} .stat-grid{grid-template-columns:repeat(2,1fr);} .meta{grid-template-columns:1fr;}}
+  @media(max-width:600px){.stat-grid{grid-template-columns:1fr;} .verdict{font-size:1.45rem;} .btn{width:100%;}}
+</style>
+</head>
+<body>
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+  <h1>AI Quality Control Dashboard</h1>
+  <span id="modelStatus">⚠ Demo Mode (no trained model)</span>
+</header>
+
+<div class="main">
+
+  <!-- Upload card -->
+  <div class="card">
+    <h2>🔍 Inspect Product Image</h2>
+    <div class="drop-zone" id="dropZone">
+      <p>Drop an image here or click to browse</p>
+      <p style="margin-top:.5rem;font-size:.8rem;">JPG, PNG, BMP supported</p>
+    </div>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <div class="action-row">
+      <button class="btn" id="inspectBtn" disabled>🔍 Inspect</button>
+      <button class="btn btn-gray" id="clearBtn">Clear</button>
+    </div>
+
+    <div class="loader" id="loader">⏳ Analysing image…</div>
+    <div class="result" id="result"></div>
+
+    <!-- PDF Report Box (shows after inspection) -->
+    <div class="report-box" id="reportBox">
+      <p>📄 PDF Report generated automatically <span class="pdf-badge">PDF</span></p>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+        <button class="btn btn-pdf" id="downloadBtn" onclick="downloadReport()">⬇ Download Report</button>
+        <button class="btn btn-green" id="batchReportBtn" onclick="generateBatchReport()">📊 Full Session Report</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats card -->
+  <div class="card">
+    <h2>📊 Session Statistics</h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl">Inspected</div></div>
+      <div class="stat"><div class="num" style="color:var(--pass)" id="statPass">0</div><div class="lbl">Passed</div></div>
+      <div class="stat"><div class="num" style="color:var(--fail)" id="statFail">0</div><div class="lbl">Defects</div></div>
+    </div>
+
+    <div style="margin-top:1.5rem;">
+      <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:.4rem;">
+        <span>Pass Rate</span><span id="passRateLabel">—</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:8px;">
+        <div id="passBar" style="background:var(--pass);height:8px;border-radius:4px;width:0%;transition:.4s;"></div>
+      </div>
+    </div>
+
+    <!-- Clear session button -->
+    <div style="margin-top:1rem;display:flex;gap:.6rem;">
+      <button class="btn btn-gray" style="flex:1;font-size:.8rem;" onclick="clearSession()">🗑 Clear Session</button>
+      <button class="btn btn-green" style="flex:1;font-size:.8rem;" onclick="generateBatchReport()">📄 Export PDF</button>
+    </div>
+
+    <div id="historyList" class="history-list"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const inspectBtn = document.getElementById('inspectBtn');
+const clearBtn   = document.getElementById('clearBtn');
+const resultDiv  = document.getElementById('result');
+const loader     = document.getElementById('loader');
+const reportBox  = document.getElementById('reportBox');
+let selectedFile = null;
+let session = {total:0, pass:0, fail:0};
+
+// Check if real model is loaded
+fetch('/api/reports').then(r => r.json()).then(() => {
+  fetch('/api/inspect', {method:'POST', body: new FormData()})
+    .catch(() => {});
+});
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  selectedFile = file;
+  inspectBtn.disabled = false;
+  const reader = new FileReader();
+  reader.onload = e => {
+    dropZone.innerHTML = `<img src="${e.target.result}" style="max-height:160px;border-radius:6px;">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+clearBtn.addEventListener('click', () => {
+  selectedFile = null;
+  inspectBtn.disabled = true;
+  dropZone.innerHTML = '<p>Drop an image here or click to browse</p><p style="margin-top:.5rem;font-size:.8rem;">JPG, PNG, BMP supported</p>';
+  resultDiv.style.display = 'none';
+  reportBox.style.display = 'none';
+  fileInput.value = '';
+});
+
+inspectBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  loader.style.display = 'block';
+  resultDiv.style.display = 'none';
+  reportBox.style.display = 'none';
+  inspectBtn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('image', selectedFile);
+
+  try {
+    const res  = await fetch('/api/inspect', {method:'POST', body:fd});
+    const data = await res.json();
+    renderResult(data);
+    updateStats(data);
+    addHistory(data, selectedFile.name);
+    // Show report box after inspection
+    reportBox.style.display = 'block';
+    showToast('✅ PDF Report generated automatically!');
+    // Update model status
+    if (!data.demo_mode) {
+      document.getElementById('modelStatus').textContent = '✅ Model Active';
+      document.getElementById('modelStatus').style.color = '#3fb950';
+    }
+  } catch(e) {
+    resultDiv.innerHTML = '<p style="color:var(--fail)">Error: '+e.message+'</p>';
+    resultDiv.style.display = 'block';
+  }
+  loader.style.display = 'none';
+  inspectBtn.disabled = false;
+});
+
+function renderResult(d) {
+  const isPass = d.verdict === 'PASS';
+  const icon = isPass ? '✅' : '❌';
+  const defectHtml = d.defect_code
+    ? `<div class="meta-item"><label>Defect Code</label><span style="color:var(--fail)">[${d.defect_code.code}] ${d.defect_code.description}</span></div>` : '';
+  const demoTag = d.demo_mode ? ' <span style="font-size:.7rem;background:#30363d;padding:2px 6px;border-radius:4px;">DEMO</span>' : '';
+  resultDiv.innerHTML = `
+    <div class="verdict ${isPass?'pass':'defect'}">${icon} ${d.verdict}${demoTag}</div>
+    <div class="meta">
+      <div class="meta-item"><label>Confidence</label><span>${(d.confidence*100).toFixed(1)}%</span></div>
+      <div class="meta-item"><label>Pass Prob.</label><span>${(d.pass_probability*100).toFixed(1)}%</span></div>
+      <div class="meta-item"><label>Defect Prob.</label><span>${(d.defect_probability*100).toFixed(1)}%</span></div>
+      <div class="meta-item"><label>ID</label><span>${d.inspection_id}</span></div>
+      ${defectHtml}
+    </div>`;
+  resultDiv.style.display = 'block';
+}
+
+function updateStats(d) {
+  if (d.verdict==='PASS') session.pass++;
+  else if (d.verdict==='DEFECT') session.fail++;
+  session.total = session.pass + session.fail;
+  document.getElementById('statTotal').textContent = session.total;
+  document.getElementById('statPass').textContent  = session.pass;
+  document.getElementById('statFail').textContent  = session.fail;
+  const rate = session.total ? session.pass/session.total*100 : 0;
+  document.getElementById('passRateLabel').textContent = rate.toFixed(1)+'%';
+  document.getElementById('passBar').style.width = rate+'%';
+}
+
+function addHistory(d, fname) {
+  const list = document.getElementById('historyList');
+  const isPass = d.verdict==='PASS';
+  const item = document.createElement('div');
+  item.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:.5rem .8rem;background:rgba(255,255,255,.03);border-radius:6px;font-size:.85rem;`;
+  item.innerHTML = `<span>${fname.slice(0,22)}</span><span style="color:${isPass?'var(--pass)':'var(--fail)'};">${isPass?'✅':'❌'} ${d.verdict} (${(d.confidence*100).toFixed(0)}%)</span>`;
+  list.prepend(item);
+}
+
+async function downloadReport() {
+  showToast('⬇ Downloading PDF report...');
+  window.location.href = '/api/download-report';
+}
+
+async function generateBatchReport() {
+  if (session.total === 0) { showToast('⚠ No inspections yet!'); return; }
+  showToast('📊 Generating full session report...');
+  try {
+    const res = await fetch('/api/generate-report', {method:'POST'});
+    const data = await res.json();
+    if (data.success) {
+      showToast('✅ Session report ready! Downloading...');
+      setTimeout(() => window.location.href = '/api/download-report', 1000);
+    }
+  } catch(e) {
+    showToast('❌ Report generation failed');
+  }
+}
+
+async function clearSession() {
+  await fetch('/api/clear-session', {method:'POST'});
+  session = {total:0, pass:0, fail:0};
+  document.getElementById('statTotal').textContent = '0';
+  document.getElementById('statPass').textContent  = '0';
+  document.getElementById('statFail').textContent  = '0';
+  document.getElementById('passRateLabel').textContent = '—';
+  document.getElementById('passBar').style.width = '0%';
+  document.getElementById('historyList').innerHTML = '';
+  showToast('🗑 Session cleared');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+</script>
+</body>
+</html>
